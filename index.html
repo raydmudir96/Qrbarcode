@@ -185,7 +185,7 @@
     align-items:center;
     justify-content:center;
   }
-  #renderCanvas{display:block; max-width:100%; image-rendering:pixelated;}
+  #renderCanvas{display:block; max-width:100%; image-rendering:auto;}
   .scanline{
     position:absolute;
     left:0; right:0; height:2px;
@@ -452,6 +452,44 @@
     <!-- PREVIEW -->
     <div class="panel preview-panel">
       <h2>پێشبینین</h2>
+
+      <div class="field">
+        <label>کوالیتیی وێنە (بۆ چاپکردنی جوان)</label>
+        <select id="exportScale">
+          <option value="1">ئاسایی — بۆ سکرین (1x)</option>
+          <option value="2">باش (2x)</option>
+          <option value="3" selected>زۆر باش — گونجاو بۆ چاپ (3x)</option>
+          <option value="4">پرۆفیشناڵ (4x)</option>
+          <option value="6">زۆر بەرز — ستیکەری بچووک (6x)</option>
+        </select>
+        <div class="hint">هەرچەند ژمارەکە زیاتر بێت، وێنەکە ڕوونتر و بێ‌لۆچ دەبێت (وەک vector) و گونجاوتر دەبێت بۆ چاپکردن — پێشبینین و دابەزاندنیش بەم قیاسە دەبن، بۆیە هەردووکیان وەک یەک دەبن.</div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>قەبارەی چاپ (پرێسێت)</label>
+          <select id="printPreset">
+            <option value="custom">دڵخواز</option>
+            <option value="30x20">لیبڵی بچووک (٣×٢ سم)</option>
+            <option value="50x30" selected>لیبڵی بارکۆد (٥×٣ سم)</option>
+            <option value="60x40">لیبڵی گەورە (٦×٤ سم)</option>
+            <option value="40x40">چوارگۆشەی QR (٤×٤ سم)</option>
+            <option value="210x297">A4 — یەک پەڕەی تەواو</option>
+          </select>
+        </div>
+        <div class="field"></div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>پانی چاپ (mm)</label>
+          <input type="number" id="printW" value="50" min="5" max="1000">
+        </div>
+        <div class="field">
+          <label>درێژی چاپ (mm)</label>
+          <input type="number" id="printH" value="30" min="5" max="1000">
+        </div>
+      </div>
+
       <div class="stage">
         <div class="scanline"></div>
         <div class="label-card">
@@ -462,6 +500,7 @@
       <div class="actions">
         <button class="act primary" id="btnPng">دابەزاندنی PNG</button>
         <button class="act" id="btnSvg">دابەزاندنی SVG (تەنها بارکۆد)</button>
+        <button class="act" id="btnPrint">چاپکردن</button>
       </div>
       <div class="meta" id="metaBox"></div>
     </div>
@@ -511,12 +550,23 @@ linkColor('qr-bgColor','qr-bgColor-hex');
 
 // ---------- generic listeners ----------
 ['bc-value','bc-format','bc-font','bc-displayValue','bc-caption','bc-captionPos',
- 'qr-value','qr-level','qr-fontSize','qr-caption']
+ 'qr-value','qr-level','qr-fontSize','qr-caption','exportScale']
  .forEach(id=>{
     const el = $(id);
     el.addEventListener('input', render);
     el.addEventListener('change', render);
  });
+
+function getScale(){ return parseFloat($('exportScale').value) || 1; }
+
+// ---------- print size preset ----------
+$('printPreset').addEventListener('change', ()=>{
+  const v = $('printPreset').value;
+  if(v === 'custom') return;
+  const [w,h] = v.split('x').map(Number);
+  $('printW').value = w;
+  $('printH').value = h;
+});
 
 function showError(msg){
   const box = $('errBox');
@@ -528,14 +578,15 @@ function showError(msg){
 function renderBarcode(){
   const svg = $('bcSvgHidden');
   const value = $('bc-value').value || '';
+  const scale = getScale();
   const opts = {
     format: $('bc-format').value,
     lineColor: $('bc-lineColor').value,
     background: $('bc-bgColor').value,
-    width: parseFloat($('bc-width').value),
-    height: parseFloat($('bc-height').value),
-    margin: parseFloat($('bc-margin').value),
-    fontSize: parseFloat($('bc-fontSize').value),
+    width: parseFloat($('bc-width').value) * scale,
+    height: parseFloat($('bc-height').value) * scale,
+    margin: parseFloat($('bc-margin').value) * scale,
+    fontSize: parseFloat($('bc-fontSize').value) * scale,
     displayValue: $('bc-displayValue').checked,
     font: $('bc-font').value,
     valid: ()=>{}
@@ -558,7 +609,7 @@ function renderBarcode(){
     img.onload = ()=>{
       const caption = $('bc-caption').value;
       const capPos = $('bc-captionPos').value;
-      const padCap = caption ? 40 : 0;
+      const padCap = caption ? 40*scale : 0;
 
       const cnv = $('renderCanvas');
       const w = img.width, h = img.height;
@@ -573,14 +624,14 @@ function renderBarcode(){
 
       if(caption){
         ctx.fillStyle = opts.lineColor;
-        ctx.font = '600 20px ' + opts.font;
+        ctx.font = '600 ' + Math.round(20*scale) + 'px ' + opts.font;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const yCap = capPos==='top' ? padCap/2 : h + padCap/2;
-        ctx.fillText(caption, w/2, yCap, w-20);
+        ctx.fillText(caption, w/2, yCap, w-20*scale);
       }
       URL.revokeObjectURL(url);
-      $('metaBox').textContent = `format: ${opts.format} | value: ${value} | ${cnv.width}×${cnv.height}px`;
+      $('metaBox').textContent = `format: ${opts.format} | value: ${value} | ${cnv.width}×${cnv.height}px | quality: ${scale}x`;
       resolve();
     };
     img.src = url;
@@ -590,13 +641,14 @@ function renderBarcode(){
 // ---------- render QR ----------
 function renderQR(){
   const value = $('qr-value').value || ' ';
-  const size = parseInt($('qr-size').value);
-  const margin = parseInt($('qr-margin').value);
+  const scale = getScale();
+  const size = parseInt($('qr-size').value) * scale;
+  const margin = parseInt($('qr-margin').value) * scale;
   const fg = $('qr-fgColor').value;
   const bg = $('qr-bgColor').value;
   const level = $('qr-level').value;
   const caption = $('qr-caption').value;
-  const capFontSize = parseInt($('qr-fontSize').value);
+  const capFontSize = parseInt($('qr-fontSize').value) * scale;
 
   const holder = $('qrHidden');
   holder.innerHTML = '';
@@ -637,9 +689,9 @@ function renderQR(){
         ctx.font = '600 '+capFontSize+'px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(caption, cnv.width/2, margin*2 + size + padCap/2 - 8, cnv.width-20);
+        ctx.fillText(caption, cnv.width/2, margin*2 + size + padCap/2 - 8*scale, cnv.width-20*scale);
       }
-      $('metaBox').textContent = `error-correction: ${level} | size: ${size}px | data length: ${value.length}`;
+      $('metaBox').textContent = `error-correction: ${level} | size: ${cnv.width}×${cnv.height}px | quality: ${scale}x | data length: ${value.length}`;
       resolve();
     }, 30);
   });
@@ -654,9 +706,38 @@ function render(){
 $('btnPng').addEventListener('click', ()=>{
   const cnv = $('renderCanvas');
   const link = document.createElement('a');
-  link.download = (mode==='barcode' ? 'barcode' : 'qrcode') + '.png';
+  link.download = (mode==='barcode' ? 'barcode' : 'qrcode') + `_${cnv.width}x${cnv.height}` + '.png';
   link.href = cnv.toDataURL('image/png');
   link.click();
+});
+
+$('btnPrint').addEventListener('click', ()=>{
+  const cnv = $('renderCanvas');
+  const w = parseFloat($('printW').value) || 50;
+  const h = parseFloat($('printH').value) || 30;
+  const dataUrl = cnv.toDataURL('image/png');
+  const win = window.open('', '_blank');
+  if(!win){
+    alert('تکایە ڕێگە بە پەنجەرەی چاپکردن (پۆپئەپ) بدە بۆ ئەم ماڵپەڕە.');
+    return;
+  }
+  win.document.write(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>چاپکردن</title>' +
+    '<style>' +
+      '@page{ size: ' + w + 'mm ' + h + 'mm; margin:0; }' +
+      'html,body{ margin:0; padding:0; }' +
+      'body{ display:flex; align-items:center; justify-content:center; }' +
+      'img{ display:block; width:' + w + 'mm; height:' + h + 'mm; }' +
+    '</style></head><body>' +
+    '<img id="printImg" src="' + dataUrl + '">' +
+    '<script>' +
+      'var im = document.getElementById("printImg");' +
+      'function go(){ setTimeout(function(){ window.focus(); window.print(); }, 200); }' +
+      'if(im.complete){ go(); } else { im.onload = go; }' +
+    '<' + '/script>' +
+    '</body></html>'
+  );
+  win.document.close();
 });
 
 $('btnSvg').addEventListener('click', ()=>{
